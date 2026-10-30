@@ -8,7 +8,7 @@ const QUESTIONS = [
   ['m', 'Welches Rezept soll nie vergessen gehen?'],
   ['f', 'Wo bewahren Sie Ihre wichtigen Papiere auf?', 'papiere'],
   ['v', 'Wem würden Sie vertrauen, wenn Sie nicht mehr selbst entscheiden könnten?'],
-  ['w', 'Was ist Ihnen wichtig, wenn Sie schwer krank sind?'],
+  ['w', 'Was wäre Ihnen wichtig, falls Sie einmal schwer krank würden?'],
   ['m', 'Welche Musik begleitet Sie schon Ihr ganzes Leben?'],
   ['m', 'Wie haben Sie einen Menschen kennengelernt, der Ihnen bis heute wichtig ist?'],
   ['f', 'Haben Sie eine Patientenverfügung? Wo liegt sie?', 'patvf'],
@@ -29,7 +29,7 @@ const QUESTIONS = [
   ['w', 'Was gibt Ihnen Kraft in schweren Zeiten?'],
   ['p', 'Wer ist Ihr Hausarzt oder Ihre Hausärztin?'],
   ['m', 'Welche Reise werden Sie nie vergessen?'],
-  ['w', 'Was soll bei Ihrer Abdankung gespielt oder gesagt werden?'],
+  ['w', 'Gibt es Musik oder Worte, die Sie sich für Ihre Abdankung wünschen? Alles ist freiwillig.'],
   ['m', 'Welchen Rat würden Sie Ihrem jüngeren Ich geben?'],
   ['f', 'Haben Sie einen Vorsorgeauftrag? Wo liegt er?', 'vorsorgeauftrag'],
   ['m', 'Mit wem haben Sie als Kind am liebsten gespielt?'],
@@ -52,7 +52,7 @@ const QUESTIONS = [
   ['m', 'Wofür sind Sie heute dankbar?'],
   ['w', 'Was wünschen Sie sich für Ihre Bestattung? Alles ist freiwillig.'],
   ['m', 'Welcher Mensch hat Ihr Leben verändert?'],
-  ['w', 'Was möchten Sie Ihren Liebsten noch sagen?'],
+  ['w', 'Was möchten Sie Ihren Liebsten gerne einmal sagen?'],
   ['p', 'Ist Ihr Wegweiser noch aktuell? Was hat sich dieses Jahr geändert?'],
   ['m', 'Wenn Sie auf dieses Jahr zurückblicken: Was war schön?'],
 ].map(([type, text, target], i) => ({ n: i + 1, type, text, target }));
@@ -60,9 +60,9 @@ const QUESTIONS = [
 // Wegweiser: vier Unterlagen, die Vertretungsperson und drei Listen. review = Monate bis «Prüfen».
 const GUIDE = [
   { id: 'patvf', name: 'Patientenverfügung', icon: 'heart', review: 24, hint: 'Was Sie medizinisch wünschen, falls Sie nicht mehr entscheiden können.' },
-  { id: 'vorsorgeauftrag', name: 'Vorsorgeauftrag', icon: 'pen', review: 36, coach: true, hint: 'Wer für Sie entscheidet, wenn Sie urteilsunfähig werden.' },
+  { id: 'vorsorgeauftrag', name: 'Vorsorgeauftrag', icon: 'pen', review: 36, coach: true, hint: 'Darin legen Sie fest, wer für Sie entscheidet, wenn Sie es selbst nicht mehr können, etwa nach einem Hirnschlag oder bei Demenz.' },
   { id: 'testament', name: 'Testament', icon: 'file', review: 60, hint: 'Ihr letzter Wille. Das Original zählt.' },
-  { id: 'vertretung', name: 'Vertretungsperson', icon: 'people', person: true, hint: 'Die Person, die im Ernstfall Bescheid weiss und handelt.' },
+  { id: 'vertretung', name: 'Wer für mich entscheidet', icon: 'people', person: true, hint: 'Die Person, die für Sie entscheidet, wenn Sie es nicht mehr selbst können. Meist ist sie im Vorsorgeauftrag genannt.' },
   { id: 'versicherungen', name: 'Versicherungen', icon: 'shield', unit: ['Police', 'Policen'], hint: 'Jede Versicherung einzeln: Art, Gesellschaft und wo die Police liegt.',
     list: { types: ['Krankenkasse', 'Haftpflicht & Hausrat', 'Lebensversicherung', 'Unfall', 'Auto', 'Rechtsschutz', 'Andere'], name: ['Gesellschaft', 'z. B. CSS'], note: ['Wo liegt die Police?', 'z. B. grüner Ordner'] } },
   { id: 'konten', name: 'Konten', icon: 'folder', unit: ['Konto', 'Konten'], hint: 'Nur wo Sie Konten haben. Nie Kontonummern, Passwörter oder PINs.',
@@ -74,7 +74,7 @@ const GUIDE = [
 const COACH = [
   ['Wer soll entscheiden?', 'Eine Person, der Sie vertrauen, und am besten eine Ersatzperson.'],
   ['Was soll sie regeln?', 'Zum Beispiel Finanzen, Post, persönliche und medizinische Anliegen.'],
-  ['Von Hand schreiben', 'Vollständig von Hand schreiben, mit Datum und Unterschrift, oder öffentlich beurkunden lassen. Zu prüfen: Art. 361 ZGB. Muster gibt es bei Pro Senectute und der KESB Ihres Kantons.'],
+  ['Von Hand schreiben', 'Den ganzen Text selbst von Hand schreiben, mit Datum und Unterschrift. Oder bei einer Notarin oder einem Notar aufsetzen lassen. Muster gibt es bei Pro Senectute.'],
   ['Original ablegen', 'Wo liegt das Original? Tragen Sie den Fundort im Wegweiser ein.'],
   ['Beim Zivilstandsamt eintragen', 'Sie können eintragen lassen, dass es einen Vorsorgeauftrag gibt und wo er liegt (Gebühr je nach Kanton).'],
   ['Die Person informieren', 'Sagen Sie der Person, dass sie eingesetzt ist und wo das Original liegt.'],
@@ -87,9 +87,9 @@ const KB = [
     a: 'In der Patientenverfügung halten Sie fest, welche medizinischen Behandlungen Sie wünschen oder ablehnen, falls Sie nicht mehr selbst entscheiden können. Sie muss <b>schriftlich, datiert und unterschrieben</b> sein (Art. 371 ZGB). Geben Sie Ihrem Hausarzt eine Kopie und prüfen Sie sie alle 1–2 Jahre. Vorlagen gibt es z. B. bei Pro Senectute, der FMH oder dem Roten Kreuz.', go: 'unterlage/patvf' },
   { q: 'Was ist ein Vorsorgeauftrag?', keys: ['vorsorgeauftrag', 'vollmacht', 'urteilsunfähig', 'kesb', 'beistand'],
     a: 'Mit einem Vorsorgeauftrag bestimmen Sie, wer für Sie entscheidet, wenn Sie es nicht mehr selbst können: bei Geld, Post und persönlichen Dingen. Er muss <b>vollständig von Hand geschrieben</b>, datiert und unterschrieben oder öffentlich beurkundet sein (Art. 361 ZGB).', go: 'coach' },
-  { q: 'Wie schreibe ich ein gültiges Testament?', keys: ['testament', 'erbe', 'erben', 'nachlass', 'pflichtteil'],
+  { q: 'Wie schreibe ich ein gültiges Testament?', keys: ['testament', 'erbe', 'erben', 'erbt', 'nachlass', 'pflichtteil'],
     a: 'Ein eigenhändiges Testament muss <b>von Anfang bis Ende von Hand geschrieben</b> sein, mit Ort, Datum und Unterschrift (Art. 505 ZGB). Beachten Sie die Pflichtteile. Bewahren Sie das Original sicher auf, z. B. beim Notariat, und notieren Sie den Fundort im Wegweiser.', go: 'unterlage/testament' },
-  { q: 'Was müssen Angehörige im Todesfall zuerst tun?', keys: ['tod', 'todesfall', 'gestorben', 'verstorben', 'zuerst'],
+  { q: 'Was müssen Angehörige im Todesfall zuerst tun?', keys: ['tod', 'todesfall', 'gestorben', 'verstorben', 'zuerst', 'sterb', 'stirbt'],
     a: 'Zuerst stellt eine Ärztin oder ein Arzt die Todesbescheinigung aus. Der Todesfall wird <b>innert 2 Tagen</b> beim Zivilstandsamt gemeldet, oft übernehmen das Spital, das Heim oder der Bestatter. Danach: Bestatter kontaktieren, Wünsche beachten und ein Testament sofort der zuständigen Behörde einreichen (Art. 556 ZGB).', go: 'notfall' },
   { q: 'Wen muss man nach einem Todesfall informieren?', keys: ['informieren', 'bank', 'versicherung', 'ahv', 'pensionskasse'],
     a: 'Banken, AHV-Ausgleichskasse, Pensionskasse, Kranken- und weitere Versicherungen sowie Vermieter. Banken geben meist erst mit einer <b>Erbbescheinigung</b> Auskunft. Im Wegweiser unter «Konten» und «Verträge & Abos» steht, welche Stellen es gibt.', go: 'unterlage/konten' },
@@ -111,7 +111,7 @@ const HELP = [
 ];
 
 // Gesprächsideen für «Mein Kreis», falls keine Wochenfrage passt
-const TOPICS = ['Was war diese Woche schön?', 'Was hast du gerade vor?', 'Welches Foto hast du zuletzt gemacht?', 'Was gab es heute zu essen?', 'Worauf freust du dich?'];
+const TOPICS = ['Was war diese Woche schön?', 'Was hast du gerade vor?', 'Welches Foto hast du zuletzt gemacht?', 'Was gab es heute zu essen?', 'Worauf freust du dich?', 'Was hat dich diese Woche zum Lachen gebracht?', 'Wie geht es den Kindern?'];
 
 const RHYTHMS = [[7, 'jede Woche'], [14, 'alle 2 Wochen'], [30, 'einmal im Monat']];
 const RELATIONS = ['Tochter', 'Sohn', 'Partner/in', 'Enkelkind', 'Schwester', 'Bruder', 'Freund/in', 'Nachbar/in', 'Andere'];

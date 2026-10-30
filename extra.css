@@ -36,3 +36,7 @@
   .hero h1 { font-size: 40px; }
   .contact { padding: 18px; }
 }
+
+/* Grössere Tippflächen */
+.helpline a { display: inline-flex; align-items: center; min-height: 44px; }
+.foot nav a, .links a { display: inline-flex; align-items: center; min-height: 44px; }
