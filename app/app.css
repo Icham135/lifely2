@@ -155,6 +155,17 @@ textarea.in { resize: vertical; line-height: 1.45; }
 .later { text-align: center; font-size: .85rem; color: var(--sunInk); margin-top: 6px; }
 .later .link { color: var(--sunInk); font-weight: 700; font-size: .85rem; }
 
+/* Wegweiser-Listen */
+.iconbtn { width: 48px; height: 48px; border-radius: 50%; border: 0; background: var(--coral1); color: var(--coralInk); display: grid; place-items: center; flex: none; }
+.iconbtn .ic { width: 20px; height: 20px; }
+.addbox { margin-top: 14px; }
+.addbox > b { font-size: 1.02rem; }
+.tag-wg { display: inline-flex; align-items: center; gap: 6px; background: var(--teal0); color: var(--teal7); font-weight: 800; font-size: .82rem; padding: 6px 12px; border-radius: 999px; margin: -6px 0 14px; }
+.tag-wg .ic { width: 16px; height: 16px; }
+.row.top-al { align-items: flex-start; }
+.row small.item { color: var(--ink); }
+.pw { text-align: center; margin-bottom: 14px; }
+
 /* Coach */
 .tl { list-style: none; padding: 0; margin: 10px 0 0; }
 .tl li { display: flex; gap: 14px; padding: 0 0 18px; position: relative; }

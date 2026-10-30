@@ -1,6 +1,7 @@
 /* Lifely 2.0 – Inhalte: Wochenfragen, Wegweiser, Coach, Wissensbasis, Hilfsnummern.
    Fragetypen: m = Erinnerung (Büchlein), w = «Das ist mir wichtig», f = Fundort (trägt in den Wegweiser ein),
-   v = Vertretungsperson (startet Coach), k = Mein Kreis, p = praktische Notiz. */
+   l = Liste im Wegweiser (z. B. alle Abos), v = Vertretungsperson (startet Coach), k = Mein Kreis, p = praktische Notiz.
+   f- und l-Fragen zeigen direkt das Wegweiser-Formular: nach 52 Wochen ist der Wegweiser vollständig. */
 const QUESTIONS = [
   ['m', 'Was war Ihr schönster Tag als Kind?'],
   ['m', 'Woran erinnern Sie sich bei Ihrem Elternhaus?'],
@@ -15,14 +16,14 @@ const QUESTIONS = [
   ['m', 'Welcher Ort auf der Welt bedeutet Ihnen am meisten?'],
   ['k', 'Wer sollte sofort informiert werden, wenn Ihnen etwas passiert?'],
   ['w', 'Welche Gewohnheit gibt Ihrem Tag Halt?'],
-  ['f', 'Welche Versicherungen haben Sie, und wo liegen die Policen?', 'versicherungen'],
+  ['l', 'Welche Versicherungen haben Sie, und wo liegen die Policen?', 'versicherungen'],
   ['m', 'Was haben Sie von Ihren Eltern gelernt?'],
   ['m', 'Welches Fest feiern Sie am liebsten, und wie?'],
   ['f', 'Gibt es ein Testament? Wo liegt das Original?', 'testament'],
   ['m', 'Was möchten Sie jüngeren Menschen mitgeben?'],
   ['m', 'Worauf sind Sie besonders stolz?'],
   ['w', 'Wer soll sich um Haustier, Pflanzen oder Wohnung kümmern, wenn Sie länger weg sind?'],
-  ['f', 'Bei welchen Banken haben Sie Konten? Bitte nur die Namen, keine Zugangsdaten.', 'konten'],
+  ['l', 'Bei welchen Banken haben Sie Konten? Bitte nur die Namen, keine Zugangsdaten.', 'konten'],
   ['m', 'Welches Buch oder welcher Film hat Sie geprägt?'],
   ['m', 'Wie sah ein ganz normaler Sonntag in Ihrer Kindheit aus?'],
   ['w', 'Was gibt Ihnen Kraft in schweren Zeiten?'],
@@ -33,7 +34,7 @@ const QUESTIONS = [
   ['f', 'Haben Sie einen Vorsorgeauftrag? Wo liegt er?', 'vorsorgeauftrag'],
   ['m', 'Mit wem haben Sie als Kind am liebsten gespielt?'],
   ['w', 'Was bedeutet für Sie ein gutes Leben?'],
-  ['f', 'Welche Verträge und Abos laufen auf Ihren Namen?', 'konten'],
+  ['l', 'Welche Verträge und Abos laufen auf Ihren Namen?', 'vertraege'],
   ['m', 'Was war Ihr liebstes Schulfach, und warum?'],
   ['w', 'Wo möchten Sie leben, wenn Sie einmal Hilfe brauchen?'],
   ['m', 'Welches Erlebnis bringt Sie bis heute zum Lachen?'],
@@ -56,14 +57,18 @@ const QUESTIONS = [
   ['m', 'Wenn Sie auf dieses Jahr zurückblicken: Was war schön?'],
 ].map(([type, text, target], i) => ({ n: i + 1, type, text, target }));
 
-// Wegweiser: die sechs Kernunterlagen. review = Monate bis «Prüfen».
+// Wegweiser: vier Unterlagen, die Vertretungsperson und drei Listen. review = Monate bis «Prüfen».
 const GUIDE = [
   { id: 'patvf', name: 'Patientenverfügung', icon: 'heart', review: 24, hint: 'Was Sie medizinisch wünschen, falls Sie nicht mehr entscheiden können.' },
   { id: 'vorsorgeauftrag', name: 'Vorsorgeauftrag', icon: 'pen', review: 36, coach: true, hint: 'Wer für Sie entscheidet, wenn Sie urteilsunfähig werden.' },
   { id: 'testament', name: 'Testament', icon: 'file', review: 60, hint: 'Ihr letzter Wille. Das Original zählt.' },
   { id: 'vertretung', name: 'Vertretungsperson', icon: 'people', person: true, hint: 'Die Person, die im Ernstfall Bescheid weiss und handelt.' },
-  { id: 'versicherungen', name: 'Versicherungen', icon: 'shield', review: 36, hint: 'Krankenkasse, Haftpflicht, Leben, Hausrat.' },
-  { id: 'konten', name: 'Konten & Verträge', icon: 'folder', review: 36, hint: 'Nur wo Konten und Verträge sind. Nie Passwörter oder PINs.' },
+  { id: 'versicherungen', name: 'Versicherungen', icon: 'shield', unit: ['Police', 'Policen'], hint: 'Jede Versicherung einzeln: Art, Gesellschaft und wo die Police liegt.',
+    list: { types: ['Krankenkasse', 'Haftpflicht & Hausrat', 'Lebensversicherung', 'Unfall', 'Auto', 'Rechtsschutz', 'Andere'], name: ['Gesellschaft', 'z. B. CSS'], note: ['Wo liegt die Police?', 'z. B. grüner Ordner'] } },
+  { id: 'konten', name: 'Konten', icon: 'folder', unit: ['Konto', 'Konten'], hint: 'Nur wo Sie Konten haben. Nie Kontonummern, Passwörter oder PINs.',
+    list: { types: ['Privatkonto', 'Sparkonto', 'Säule 3a', 'Wertschriften', 'Freizügigkeitskonto', 'Andere'], name: ['Bank oder Institut', 'z. B. Berner Kantonalbank'], note: ['Bemerkung', 'z. B. Filiale Bümpliz'] } },
+  { id: 'vertraege', name: 'Verträge & Abos', icon: 'file', unit: ['Vertrag', 'Verträge'], hint: 'Was Angehörige kündigen oder übernehmen müssen.',
+    list: { types: ['Handy', 'Internet & TV', 'Miete', 'Zeitung / Zeitschrift', 'Streaming', 'Verein', 'Spende / Dauerauftrag', 'Andere'], name: ['Anbieter', 'z. B. Swisscom'], note: ['Bemerkung', 'z. B. monatlich, Kundennummer'] } },
 ];
 
 const COACH = [
@@ -79,19 +84,19 @@ const COACH = [
 // Wissensbasis für den Assistenten (geprüfte Kurzantworten, keine Rechtsberatung)
 const KB = [
   { q: 'Was gehört in eine Patientenverfügung?', keys: ['patient', 'verfügung', 'spital', 'medizin', 'behandlung'],
-    a: 'In der Patientenverfügung halten Sie fest, welche medizinischen Behandlungen Sie wünschen oder ablehnen, falls Sie nicht mehr selbst entscheiden können. Sie muss <b>schriftlich, datiert und unterschrieben</b> sein (Art. 371 ZGB). Geben Sie Ihrem Hausarzt eine Kopie und prüfen Sie sie alle 1–2 Jahre. Vorlagen gibt es z. B. bei Pro Senectute, der FMH oder dem Roten Kreuz.', go: 'wegweiser/patvf' },
+    a: 'In der Patientenverfügung halten Sie fest, welche medizinischen Behandlungen Sie wünschen oder ablehnen, falls Sie nicht mehr selbst entscheiden können. Sie muss <b>schriftlich, datiert und unterschrieben</b> sein (Art. 371 ZGB). Geben Sie Ihrem Hausarzt eine Kopie und prüfen Sie sie alle 1–2 Jahre. Vorlagen gibt es z. B. bei Pro Senectute, der FMH oder dem Roten Kreuz.', go: 'unterlage/patvf' },
   { q: 'Was ist ein Vorsorgeauftrag?', keys: ['vorsorgeauftrag', 'vollmacht', 'urteilsunfähig', 'kesb', 'beistand'],
     a: 'Mit einem Vorsorgeauftrag bestimmen Sie, wer für Sie entscheidet, wenn Sie es nicht mehr selbst können: bei Geld, Post und persönlichen Dingen. Er muss <b>vollständig von Hand geschrieben</b>, datiert und unterschrieben oder öffentlich beurkundet sein (Art. 361 ZGB).', go: 'coach' },
   { q: 'Wie schreibe ich ein gültiges Testament?', keys: ['testament', 'erbe', 'erben', 'nachlass', 'pflichtteil'],
-    a: 'Ein eigenhändiges Testament muss <b>von Anfang bis Ende von Hand geschrieben</b> sein, mit Ort, Datum und Unterschrift (Art. 505 ZGB). Beachten Sie die Pflichtteile. Bewahren Sie das Original sicher auf, z. B. beim Notariat, und notieren Sie den Fundort im Wegweiser.', go: 'wegweiser/testament' },
+    a: 'Ein eigenhändiges Testament muss <b>von Anfang bis Ende von Hand geschrieben</b> sein, mit Ort, Datum und Unterschrift (Art. 505 ZGB). Beachten Sie die Pflichtteile. Bewahren Sie das Original sicher auf, z. B. beim Notariat, und notieren Sie den Fundort im Wegweiser.', go: 'unterlage/testament' },
   { q: 'Was müssen Angehörige im Todesfall zuerst tun?', keys: ['tod', 'todesfall', 'gestorben', 'verstorben', 'zuerst'],
     a: 'Zuerst stellt eine Ärztin oder ein Arzt die Todesbescheinigung aus. Der Todesfall wird <b>innert 2 Tagen</b> beim Zivilstandsamt gemeldet, oft übernehmen das Spital, das Heim oder der Bestatter. Danach: Bestatter kontaktieren, Wünsche beachten und ein Testament sofort der zuständigen Behörde einreichen (Art. 556 ZGB).', go: 'notfall' },
   { q: 'Wen muss man nach einem Todesfall informieren?', keys: ['informieren', 'bank', 'versicherung', 'ahv', 'pensionskasse'],
-    a: 'Banken, AHV-Ausgleichskasse, Pensionskasse, Kranken- und weitere Versicherungen sowie Vermieter. Banken geben meist erst mit einer <b>Erbbescheinigung</b> Auskunft. Im Wegweiser unter «Konten & Verträge» steht, welche Stellen es gibt.', go: 'wegweiser/konten' },
+    a: 'Banken, AHV-Ausgleichskasse, Pensionskasse, Kranken- und weitere Versicherungen sowie Vermieter. Banken geben meist erst mit einer <b>Erbbescheinigung</b> Auskunft. Im Wegweiser unter «Konten» und «Verträge & Abos» steht, welche Stellen es gibt.', go: 'unterlage/konten' },
   { q: 'Soll ich Passwörter in Lifely speichern?', keys: ['passwort', 'pin', 'zugang', 'login'],
     a: '<b>Nein.</b> Lifely speichert bewusst keine Passwörter oder PINs. Notieren Sie nur, <i>wo</i> Sie Konten haben. Für den digitalen Nachlass eignet sich ein Passwort-Manager mit Notfallzugang oder ein versiegelter Umschlag beim Notariat.' },
   { q: 'Wo sind meine Daten?', keys: ['daten', 'sicher', 'cloud', 'server', 'gespeichert'],
-    a: 'Alles bleibt <b>nur auf diesem Gerät</b>. Lifely hat kein Konto, keine Cloud und keinen Server. Für den Ernstfall erstellen Sie ein <b>verschlüsseltes Notfallpaket</b>, das nur mit dem Passwort auf dem Notfallblatt geöffnet werden kann.', go: 'sicherheit' },
+    a: 'Alles bleibt <b>nur auf diesem Gerät</b>. Lifely hat kein Konto, keine Cloud und keinen Server. Für den Ernstfall erstellen Sie ein <b>verschlüsseltes Notfallpaket</b>. Ihre Vertrauensperson öffnet es mit dem Passwort, das Sie ihr geben.', go: 'sicherheit' },
   { q: 'Mit wem kann ich reden, wenn es mir nicht gut geht?', keys: ['reden', 'allein', 'traurig', 'einsam', 'hilfe', 'gespräch'],
     a: 'Rufen Sie jemanden aus «Mein Kreis» an, ein kurzes Hallo freut die meisten mehr, als man denkt. Rund um die Uhr hört Ihnen die <b>Dargebotene Hand unter 143</b> zu. Täglich von 9 bis 20 Uhr gibt es <b>malreden, 0800 890 890</b>, gratis und anonym. In einem Notfall wählen Sie <b>144</b>.', go: 'kreis' },
 ];

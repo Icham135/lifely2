@@ -46,16 +46,63 @@ function advanceWeek() { // neue Woche: nächste Frage, sobald die alte beantwor
 function nextQuestionNow() { if (S.qi < QUESTIONS.length - 1) { S.qi++; S.qSince = Date.now(); save(false); } }
 
 /* ---------- Wegweiser-Status ---------- */
-function status(item) {
-  const d = S.guide[item.id] || {};
+const plural = (n, [one, many]) => `${n} ${n === 1 ? one : many}`;
+function status(item, src = S) {
+  const d = src.guide?.[item.id] || {};
   if (item.person) return d.person ? (d.informed ? ['ok', 'Geregelt', `${d.person} · informiert ✓`] : ['warn', 'Offen', `${d.person} · noch nicht informiert`]) : ['warn', 'Offen', 'Noch niemand bestimmt'];
+  if (item.list) {
+    const it = d.items || [];
+    if (it.length) return ['ok', 'Geregelt', `${plural(it.length, item.unit)}: ${it.map(x => x.name).join(', ')}`];
+    return d.none ? ['ok', 'Geregelt', 'Keine vorhanden'] : ['warn', 'Offen', 'Noch nichts eingetragen'];
+  }
   if (d.has !== 'ja') return ['warn', 'Offen', d.has === 'nein' ? (item.coach ? 'Noch nicht vorhanden · Coach starten' : 'Noch nicht vorhanden') : 'Noch nicht erfasst'];
-  const where = d.where || S.papiere;
+  const where = d.where || src.papiere;
   if (!where) return ['warn', 'Offen', 'Fundort fehlt'];
   if (item.review && d.checked && months(d.checked) > item.review) return ['due', 'Prüfen', `Zuletzt geprüft ${new Date(d.checked).getFullYear()}`];
   return ['ok', 'Geregelt', `Original: ${where}${d.copy ? ' · Kopie: ' + d.copy : ''}`];
 }
 const guideDone = () => GUIDE.filter(i => status(i)[0] === 'ok').length;
+
+/* ---------- Wegweiser-Formulare (im Wegweiser und direkt in der Wochenfrage) ---------- */
+const docForm = (item, d) => `<fieldset class="field"><legend>Gibt es das bei Ihnen?</legend><div class="seg" role="group">${[['ja', 'Ja'], ['nein', 'Nein'], ['?', 'Weiss nicht']].map(([v, l]) => `<button type="button" data-has="${v}" aria-pressed="${d.has === v}">${l}</button>`).join('')}</div></fieldset>
+  <div class="docmore stack" ${d.has === 'ja' ? '' : 'hidden'}>
+    <label class="field">Wo liegt das Original?<input class="in" id="where" value="${esc(d.where || '')}" placeholder="${esc(S.papiere || 'z. B. Schrank links, blauer Ordner')}"></label>
+    <label class="field">Wer hat eine Kopie? <span class="opt">(freiwillig)</span><input class="in" id="copy" value="${esc(d.copy || '')}" placeholder="z. B. Hausarzt, Anna"></label>
+    <label class="field">Wer weiss Bescheid? <span class="opt">(freiwillig)</span><input class="in" id="who" value="${esc(d.who || '')}" placeholder="z. B. Anna"></label>
+  </div>
+  ${item.coach ? `<p class="note docnein" ${d.has === 'nein' ? '' : 'hidden'}>${svg('pen')}<span>Kein Problem. Der Vorsorgeauftrag-Coach zeigt Ihnen Schritt für Schritt, wie es geht.</span></p>` : ''}`;
+function bindDoc(root, d) {
+  let has = d.has;
+  root.querySelectorAll('[data-has]').forEach(b => b.onclick = () => {
+    has = b.dataset.has; root.querySelectorAll('[data-has]').forEach(x => x.setAttribute('aria-pressed', x === b));
+    root.querySelector('.docmore').hidden = has !== 'ja';
+    const n = root.querySelector('.docnein'); if (n) n.hidden = has !== 'nein';
+  });
+  return () => ({ has, where: root.querySelector('#where').value.trim(), copy: root.querySelector('#copy').value.trim(), who: root.querySelector('#who').value.trim() });
+}
+function listBlock(item, d) {
+  const L = item.list, items = d.items || [];
+  return `<div class="list">${items.map((x, i) => `<div class="row"><span class="ico">${svg(item.icon)}</span><span class="m"><b>${esc(x.name)}</b><small>${esc(x.type)}${x.note ? ' · ' + esc(x.note) : ''}</small></span><button type="button" class="iconbtn" data-del="${i}" aria-label="${esc(x.name)} entfernen">${svg('trash')}</button></div>`).join('')}</div>
+  ${item.id === 'konten' ? `<p class="note warn">${svg('lock')}<span>Nur <b>wo</b> Sie Konten haben. Nie Kontonummern, Passwörter oder PINs.</span></p>` : ''}
+  <div class="card mint addbox stack"><b>${items.length ? 'Weitere hinzufügen' : 'Ersten Eintrag hinzufügen'}</b>
+    <label class="field">Art<select class="in" id="ltype">${L.types.map(t => `<option>${t}</option>`).join('')}</select></label>
+    <label class="field">${L.name[0]}<input class="in" id="lname" placeholder="${L.name[1]}"></label>
+    <label class="field">${L.note[0]} <span class="opt">(freiwillig)</span><input class="in" id="lnote" placeholder="${L.note[1]}"></label>
+    <button type="button" class="btn primary" id="ladd">${svg('plus')}Hinzufügen</button></div>
+  ${!items.length ? `<label class="row switch"><span class="m"><b>Ich habe keine</b><small>Dann gilt dieser Punkt als erledigt.</small></span><input type="checkbox" id="lnone" ${d.none ? 'checked' : ''}><span class="sw" aria-hidden="true"></span></label>` : ''}`;
+}
+function bindList(root, item, d) {
+  const box = root.querySelector('#lb');
+  const redraw = (focus) => { box.innerHTML = listBlock(item, d); bindList(root, item, d); if (focus) box.querySelector('#lname').focus(); };
+  box.querySelector('#ladd').onclick = () => {
+    const name = box.querySelector('#lname').value.trim(); if (!name) return toast(`Bitte «${item.list.name[0]}» ausfüllen.`);
+    (d.items = d.items || []).push({ type: box.querySelector('#ltype').value, name, note: box.querySelector('#lnote').value.trim() });
+    d.none = false; save(); toast(`${name} hinzugefügt`); redraw(true);
+  };
+  box.querySelectorAll('[data-del]').forEach(b => b.onclick = () => { d.items.splice(+b.dataset.del, 1); save(); redraw(); });
+  box.querySelector('#lnone')?.addEventListener('change', (e) => { d.none = e.target.checked; save(); });
+}
+const docSummary = (d) => d.has === 'ja' ? `Ja · Original: ${d.where || S.papiere || 'Fundort fehlt'}` : d.has === 'nein' ? 'Nein, noch nicht vorhanden' : 'Weiss nicht';
 
 /* ---------- Mein Kreis ---------- */
 const dueIn = (p) => Math.max(p.snooze || 0, (p.last || 0) + p.rhythm * DAY) - Date.now();
@@ -157,7 +204,7 @@ routes.setup = (step = '0') => {
   if (step === 5) body = `<h1>Ihre Daten bleiben bei Ihnen</h1>
     <ul class="checks"><li>${svg('phoneDev')}<span><b>Nur auf diesem Gerät.</b> Kein Konto, keine Cloud, kein Server.</span></li>
     <li>${svg('lock')}<span><b>Keine Passwörter.</b> Lifely fragt nie nach PINs oder Zugangsdaten.</span></li>
-    <li>${svg('shield')}<span><b>Notfallpaket.</b> Für den Ernstfall eine verschlüsselte Datei, die nur Ihre Vertrauensperson mit dem Passwort öffnet.</span></li>
+    <li>${svg('shield')}<span><b>Notfallpaket.</b> Für den Ernstfall eine verschlüsselte Datei, die nur Ihre Vertrauensperson mit dem Passwort öffnen kann.</span></li>
     <li>${svg('heart')}<span><b>Kein Rechtsdokument.</b> Lifely ist ein Wegweiser und ersetzt keine Beratung.</span></li></ul>
     <div class="bottom"><button class="btn primary" id="finish">Einverstanden, erste Frage ansehen</button></div>`;
   $app.innerHTML = `<section class="screen setup">${head}${body}</section>`;
@@ -194,10 +241,10 @@ routes.heute = () => {
       : `<div class="card sun done"><p class="eb">Frage der Woche · ${q.n} von 52</p><p class="qt small">Diese Woche erledigt ${svg('check', 'okc')}</p>
         <p class="tiny">Die nächste Frage kommt in ${days} ${days === 1 ? 'Tag' : 'Tagen'}.</p>${S.qi < 51 ? '<button class="link" id="nextq">Nächste Frage schon jetzt</button>' : ''}</div>`}
     ${due.length ? dueCard(due[0]) : ''}
-    <button class="card plain" data-go="wegweiser"><div class="spread"><b>Wegweiser</b><span class="teal">${gd} von 6 geregelt</span></div>
-      <div class="bar"><i style="width:${Math.round(gd / 6 * 100)}%"></i></div><p class="tiny">${next ? `Als Nächstes: ${next.name}, ${status(next)[2].toLowerCase()}` : 'Alles geregelt. Einmal im Jahr prüfen.'}</p></button>
+    <button class="card plain" data-go="wegweiser"><div class="spread"><b>Wegweiser</b><span class="teal">${gd} von ${GUIDE.length} geregelt</span></div>
+      <div class="bar"><i style="width:${Math.round(gd / GUIDE.length * 100)}%"></i></div><p class="tiny">${next ? `Als Nächstes: ${next.name}, ${status(next)[2].toLowerCase()}` : 'Alles geregelt. Einmal im Jahr prüfen.'}</p></button>
     ${checks.map(i => `<button class="row" data-go="unterlage/${i.id}"><span class="ico coral">${svg('bell')}</span><span class="m"><b>${i.name} prüfen</b><small>Zuletzt geprüft vor über ${i.review / 12} Jahren</small></span></button>`).join('')}
-    ${paketOld ? `<button class="row" data-go="paket"><span class="ico coral">${svg('lock')}</span><span class="m"><b>Notfallpaket erneuern</b><small>Seit dem letzten Mal hat sich etwas geändert</small></span></button>` : ''}
+    ${paketOld ? `<button class="row" data-go="paket/1"><span class="ico coral">${svg('lock')}</span><span class="m"><b>Notfallpaket erneuern</b><small>Seit dem letzten Mal hat sich etwas geändert</small></span></button>` : ''}
     <button class="row" data-go="kreis"><span class="ico">${svg('people')}</span><span class="m"><b>Mein Kreis</b><small>${S.kreis.length ? S.kreis.map(p => esc(p.name)).join(' · ') : 'Menschen, die Ihnen wichtig sind'}</small></span>${due.length ? `<span class="chip warn">${due.length}</span>` : svg('chev', 'chev')}</button>
   </section>`;
   $app.querySelector('#nextq')?.addEventListener('click', () => { nextQuestionNow(); render(); });
@@ -208,54 +255,67 @@ const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 routes.frage = (n) => {
   const q = n ? QUESTIONS[+n - 1] : Q(); if (!q) return go('heute');
   const a = S.answers[q.n] || {};
-  const toggle = { f: ['Fundort im Wegweiser eintragen?', 'Dann weiss Ihre Vertrauensperson, wo alles liegt.'], v: ['Als Vertretungsperson eintragen?', 'Danach hilft Ihnen der Coach beim Vorsorgeauftrag.'], k: ['Danach «Mein Kreis» öffnen?', 'Dort hinterlegen Sie die Person mit Telefonnummer.'] }[q.type];
+  const item = (q.type === 'l' || q.type === 'f') ? GUIDE.find(i => i.id === q.target) : null; // füllt den Wegweiser direkt
+  const toggle = { f: ['Im Wegweiser eintragen?', 'Dann weiss Ihre Vertrauensperson, wo Ihre Papiere liegen.'], v: ['Als Vertretungsperson eintragen?', 'Danach hilft Ihnen der Coach beim Vorsorgeauftrag.'], k: ['Danach «Mein Kreis» öffnen?', 'Dort hinterlegen Sie die Person mit Telefonnummer.'] }[q.type];
+  let body;
+  if (item?.list) body = `<p class="lead">Tragen Sie alles ein, was Ihnen einfällt. Später können Sie im Wegweiser jederzeit ergänzen.</p><div id="lb">${listBlock(item, g(item.id))}</div>`;
+  else if (item) body = `<p class="tag-wg">${svg('pin')}Kommt direkt in Ihren Wegweiser</p><div class="stack" id="doc">${docForm(item, g(item.id))}</div>`;
+  else body = `${SR ? `<div class="micwrap"><button class="mic" id="mic" aria-pressed="false" aria-label="Antwort sprechen">${svg('mic')}</button>
+      <p class="center"><b id="micLabel">Tippen und sprechen</b></p><p class="tiny center">oder schreiben Sie Ihre Antwort</p></div>` : `<p class="tiny">Tipp: Mit dem Mikrofon auf der Tastatur können Sie die Antwort auch sprechen.</p>`}
+    <textarea class="in" id="txt" rows="5" placeholder="Ihre Antwort …">${esc(a.text || '')}</textarea>
+    ${toggle ? `<label class="row switch"><span class="m"><b>${toggle[0]}</b><small>${toggle[1]}</small></span><input type="checkbox" id="tog" checked><span class="sw" aria-hidden="true"></span></label>` : ''}
+    ${q.type === 'w' ? '<p class="tiny">Diese Antwort kommt auf Ihre Gesprächskarte «Das ist mir wichtig». Sie ist keine Verfügung.</p>' : ''}`;
   $app.innerHTML = `<section class="screen answer">
     <div class="top">${back('heute', 'Woche ' + q.n)}</div>
     <p class="eb">Frage der Woche</p>
     <h1 class="qt big">${esc(q.text)}</h1>
-    ${SR ? `<div class="micwrap"><button class="mic" id="mic" aria-pressed="false" aria-label="Antwort sprechen">${svg('mic')}</button>
-      <p class="center"><b id="micLabel">Tippen und sprechen</b></p><p class="tiny center">oder schreiben Sie Ihre Antwort</p></div>` : `<p class="tiny">Tipp: Mit dem Mikrofon auf der Tastatur können Sie die Antwort auch sprechen.</p>`}
-    <textarea class="in" id="txt" rows="5" placeholder="Ihre Antwort …">${esc(a.text || '')}</textarea>
-    ${toggle ? `<label class="row switch"><span class="m"><b>${toggle[0]}</b><small>${toggle[1]}</small></span><input type="checkbox" id="tog" checked><span class="sw" aria-hidden="true"></span></label>` : ''}
-    ${q.type === 'w' ? '<p class="tiny">Diese Antwort kommt auf Ihre Gesprächskarte «Das ist mir wichtig». Sie ist keine Verfügung.</p>' : ''}
-    <div class="bottom"><button class="btn primary" id="save">Antwort speichern</button>
+    ${body}
+    <div class="bottom"><button class="btn primary" id="save">${item ? 'Fertig' : 'Antwort speichern'}</button>
       <button class="btn ghost" id="skip">${answered(q.n) ? 'Zurück ohne Änderung' : 'Diese Frage überspringen'}</button></div>
   </section>`;
   const txt = $app.querySelector('#txt');
-  if (SR) {
+  if (SR && txt) {
     let rec = null; const mic = $app.querySelector('#mic'), lab = $app.querySelector('#micLabel');
     mic.onclick = () => {
       if (rec) return rec.stop();
       rec = new SR(); rec.lang = 'de-CH'; rec.interimResults = false; rec.continuous = true;
       const base = txt.value ? txt.value.trim() + ' ' : '';
-      let said = '';
-      rec.onresult = (e) => { said = [...e.results].map(r => r[0].transcript).join(' '); txt.value = base + said; };
+      rec.onresult = (e) => { txt.value = base + [...e.results].map(r => r[0].transcript).join(' '); };
       rec.onend = () => { rec = null; mic.setAttribute('aria-pressed', 'false'); lab.textContent = 'Tippen und sprechen'; };
       rec.onerror = () => toast('Die Spracheingabe hat nicht geklappt. Sie können auch schreiben.');
       rec.start(); mic.setAttribute('aria-pressed', 'true'); lab.textContent = 'Ich höre zu … zum Beenden tippen';
     };
   }
+  if (item?.list) bindList($app, item, g(item.id));
+  const collect = item && !item.list ? bindDoc($app.querySelector('#doc'), g(item.id)) : null;
   $app.querySelector('#skip').onclick = () => { if (!answered(q.n) && !S.skipped.includes(q.n)) { S.skipped.push(q.n); save(false); } go('heute'); };
   $app.querySelector('#save').onclick = () => {
-    const text = txt.value.trim(); if (!text) return toast('Bitte sprechen oder schreiben Sie eine Antwort, oder überspringen Sie die Frage.');
-    S.answers[q.n] = { text, ts: Date.now() };
-    const on = $app.querySelector('#tog')?.checked;
     let then = 'heute';
-    if (q.type === 'f' && on) {
-      if (q.target === 'papiere') S.papiere = text.slice(0, 80);
-      else Object.assign(g(q.target), { has: 'ja', where: text.slice(0, 80), checked: g(q.target).checked || Date.now() });
+    if (item?.list) {
+      const d = g(item.id); if (!d.items?.length && !d.none) return toast('Fügen Sie mindestens einen Eintrag hinzu oder wählen Sie «Ich habe keine».');
+      S.answers[q.n] = { text: status(item)[2], ts: Date.now() };
+    } else if (item) {
+      const c = collect(); if (!c.has) return toast('Bitte wählen Sie Ja, Nein oder Weiss nicht.');
+      const d = g(item.id); Object.assign(d, c); if (c.has === 'ja') d.checked = Date.now(); // beantwortet = geprüft
+      S.answers[q.n] = { text: docSummary(d), ts: Date.now() };
+      if (item.coach && c.has === 'nein') then = 'coach';
+    } else {
+      const text = txt.value.trim(); if (!text) return toast('Bitte sprechen oder schreiben Sie eine Antwort, oder überspringen Sie die Frage.');
+      S.answers[q.n] = { text, ts: Date.now() };
+      const on = $app.querySelector('#tog')?.checked;
+      if (q.type === 'f' && on) S.papiere = text.slice(0, 80);
+      if (q.type === 'v' && on) { g('vertretung').person = text.split(/[,.\n]/)[0].slice(0, 40); then = 'coach'; }
+      if (q.type === 'k' && on) then = 'kreis';
     }
-    if (q.type === 'v' && on) { g('vertretung').person = text.split(/[,.\n]/)[0].slice(0, 40); then = 'coach'; }
-    if (q.type === 'k' && on) then = 'kreis';
     save(); toast('Gespeichert. Danke!'); go(then);
   };
 };
 
 /* ---------- Wegweiser ---------- */
 routes.wegweiser = () => {
-  const gd = guideDone();
-  $app.innerHTML = `<section class="screen"><h1>Wegweiser</h1><p class="lead">Was ist geregelt, wo liegt das Original, wer weiss Bescheid?</p>
-    <div class="card mint"><div class="spread"><b>${gd} von 6 geregelt</b><span class="teal">${Math.round(gd / 6 * 100)} %</span></div><div class="bar"><i style="width:${Math.round(gd / 6 * 100)}%"></i></div></div>
+  const gd = guideDone(), all = GUIDE.length, pct = Math.round(gd / all * 100);
+  $app.innerHTML = `<section class="screen"><h1>Wegweiser</h1><p class="lead">Was ist geregelt, wo liegt das Original, wer weiss Bescheid? Die Wochenfragen füllen ihn nach und nach, Sie können aber jederzeit selbst ergänzen.</p>
+    <div class="card mint"><div class="spread"><b>${gd} von ${all} geregelt</b><span class="teal">${pct} %</span></div><div class="bar"><i style="width:${pct}%"></i></div></div>
     <div class="list">${GUIDE.map(i => { const [cls, label, sub] = status(i); return `<button class="row" data-go="unterlage/${i.id}"><span class="ico ${cls === 'warn' ? 'sun' : ''}">${svg(i.icon)}</span><span class="m"><b>${i.name}</b><small>${esc(sub)}</small></span><span class="chip ${cls}">${label}</span></button>`; }).join('')}</div>
     ${S.papiere ? `<p class="tiny">Ihre Papiere allgemein: ${esc(S.papiere)}</p>` : ''}
     <p class="tiny">Lifely ist ein Wegweiser, kein Aufbewahrungsort. Die Originale und die Rechte bleiben, wo sie sind.</p></section>`;
@@ -263,27 +323,21 @@ routes.wegweiser = () => {
 routes.unterlage = (id) => {
   const item = GUIDE.find(i => i.id === id); if (!item) return go('wegweiser');
   const d = g(id);
-  const segHas = `<div class="seg" role="group" aria-label="Vorhanden?">${[['ja', 'Ja'], ['nein', 'Nein'], ['?', 'Weiss nicht']].map(([v, l]) => `<button type="button" data-has="${v}" aria-pressed="${d.has === v}">${l}</button>`).join('')}</div>`;
+  let form;
+  if (item.person) form = `<label class="field">Wer ist es?<input class="in" id="person" value="${esc(d.person || '')}" placeholder="z. B. Anna Muster, Tochter"></label>
+      <label class="row switch"><span class="m"><b>Die Person ist informiert</b><small>Sie weiss, dass sie im Ernstfall gefragt ist.</small></span><input type="checkbox" id="informed" ${d.informed ? 'checked' : ''}><span class="sw" aria-hidden="true"></span></label>`;
+  else if (item.list) form = `<div id="lb">${listBlock(item, d)}</div>`;
+  else form = `<div class="stack" id="doc">${docForm(item, d)}</div>${d.checked ? `<p class="tiny">Zuletzt geprüft: ${fmt(d.checked)}</p>` : ''}`;
   $app.innerHTML = `<section class="screen"><div class="top">${back('wegweiser', 'Wegweiser')}</div>
     <h1>${item.name}</h1><p class="lead">${item.hint}</p>
-    <form id="f" class="stack">
-    ${item.person ? `<label class="field">Wer ist es?<input class="in" id="person" value="${esc(d.person || '')}" placeholder="z. B. Anna Muster, Tochter"></label>
-      <label class="row switch"><span class="m"><b>Die Person ist informiert</b><small>Sie weiss, dass sie im Ernstfall gefragt ist.</small></span><input type="checkbox" id="informed" ${d.informed ? 'checked' : ''}><span class="sw" aria-hidden="true"></span></label>`
-    : `<fieldset class="field"><legend>Gibt es das bei Ihnen?</legend>${segHas}</fieldset>
-      <label class="field">Wo liegt das Original?<input class="in" id="where" value="${esc(d.where || '')}" placeholder="${esc(S.papiere || 'z. B. Schrank links, blauer Ordner')}"></label>
-      <label class="field">Wer hat eine Kopie? <span class="opt">(freiwillig)</span><input class="in" id="copy" value="${esc(d.copy || '')}" placeholder="z. B. Hausarzt, Anna"></label>
-      <label class="field">Wer weiss Bescheid? <span class="opt">(freiwillig)</span><input class="in" id="who" value="${esc(d.who || '')}" placeholder="z. B. Anna"></label>
-      ${id === 'konten' ? `<p class="note warn">${svg('lock')}<span>Tragen Sie nur ein, <b>wo</b> Sie Konten haben. Nie Passwörter oder PINs.</span></p>` : ''}
-      ${d.checked ? `<p class="tiny">Zuletzt geprüft: ${fmt(d.checked)}</p>` : ''}`}
-    <div class="bottom"><button class="btn primary">Speichern</button>
-      ${!item.person ? '<button type="button" class="btn ghost" id="checked">Heute geprüft</button>' : ''}
+    <form id="f" class="stack">${form}
+    <div class="bottom">${item.list ? '<button type="button" class="btn primary" data-go="wegweiser">Fertig</button>' : '<button class="btn primary">Speichern</button>'}
+      ${!item.person && !item.list ? '<button type="button" class="btn ghost" id="checked">Heute geprüft, alles stimmt</button>' : ''}
       ${item.coach ? `<button type="button" class="btn ghost" data-go="coach">${svg('pen')}Vorsorgeauftrag-Coach</button>` : ''}</div>
     </form></section>`;
-  let has = d.has;
-  $app.querySelectorAll('[data-has]').forEach(b => b.onclick = () => { has = b.dataset.has; $app.querySelectorAll('[data-has]').forEach(x => x.setAttribute('aria-pressed', x === b)); });
   const $ = (s) => $app.querySelector(s);
-  const collect = () => item.person ? { person: $('#person').value.trim(), informed: $('#informed').checked }
-    : { has, where: $('#where').value.trim(), copy: $('#copy').value.trim(), who: $('#who').value.trim() };
+  if (item.list) return bindList($app, item, d);
+  const collect = item.person ? () => ({ person: $('#person').value.trim(), informed: $('#informed').checked }) : bindDoc($('#doc'), d);
   $('#f').addEventListener('submit', (e) => { e.preventDefault(); const c = collect(); if (c.has === 'ja' && !d.checked) c.checked = Date.now(); Object.assign(d, c); save(); toast('Gespeichert'); go('wegweiser'); });
   $('#checked')?.addEventListener('click', () => { Object.assign(d, collect(), { checked: Date.now() }); if (!d.has) d.has = 'ja'; save(); toast('Danke! Lifely erinnert Sie wieder.'); go('wegweiser'); });
 };
@@ -330,7 +384,7 @@ routes.person = (id) => {
       <label class="field">Beziehung<select class="in" id="rel">${RELATIONS.map(r => `<option ${p.rel === r ? 'selected' : ''}>${r}</option>`).join('')}</select></label>
       <label class="field">Telefon<input class="in" id="phone" inputmode="tel" value="${esc(p.phone)}" placeholder="z. B. 079 123 45 67"></label>
       <fieldset class="field"><legend>Wie oft möchten Sie sich melden?</legend><div class="seg">${RHYTHMS.map(([d, l]) => `<button type="button" data-r="${d}" aria-pressed="${p.rhythm === d}">${l}</button>`).join('')}</div></fieldset>
-      <label class="row switch"><span class="m"><b>Vertrauensperson</b><small>Weiss im Ernstfall Bescheid und steht auf dem Notfallblatt.</small></span><input type="checkbox" id="trust" ${p.trust ? 'checked' : ''}><span class="sw" aria-hidden="true"></span></label>
+      <label class="row switch"><span class="m"><b>Vertrauensperson</b><small>Weiss im Ernstfall Bescheid und steht im Notfallpaket.</small></span><input type="checkbox" id="trust" ${p.trust ? 'checked' : ''}><span class="sw" aria-hidden="true"></span></label>
       <div class="bottom"><button class="btn primary">Speichern</button>
       ${!isNew ? `<button type="button" class="btn ghost" id="ics">${svg('bell')}Als Termin in den Kalender</button><button type="button" class="btn danger" id="del">Aus Mein Kreis entfernen</button>` : ''}</div>
     </form></section>`;
@@ -343,7 +397,7 @@ routes.person = (id) => {
     if (isNew) S.kreis.push(p); save(); toast(isNew ? `${name} ist jetzt in Ihrem Kreis.` : 'Gespeichert'); go('kreis');
   });
   $('#ics')?.addEventListener('click', () => downloadICS(p));
-  $('#del')?.addEventListener('click', async () => { if (await confirmSheet(`${p.name} entfernen?`, 'Die Person verschwindet aus Mein Kreis und vom Notfallblatt.', 'Ja, entfernen')) { S.kreis = S.kreis.filter(x => x !== p); save(); go('kreis'); } });
+  $('#del')?.addEventListener('click', async () => { if (await confirmSheet(`${p.name} entfernen?`, 'Die Person verschwindet aus Mein Kreis.', 'Ja, entfernen')) { S.kreis = S.kreis.filter(x => x !== p); save(); go('kreis'); } });
 };
 function downloadICS(p) {
   const d = new Date(Date.now() + DAY); d.setHours(10, 0, 0, 0);
@@ -359,7 +413,7 @@ function download(blob, name) { const a = document.createElement('a'); a.href = 
 /* ---------- Meine Geschichte ---------- */
 let histTab = 'antworten';
 routes.geschichte = () => {
-  const list = QUESTIONS.filter(q => answered(q.n) && (histTab === 'antworten' ? q.type !== 'w' : q.type === 'w')).reverse();
+  const list = QUESTIONS.filter(q => answered(q.n) && (histTab === 'antworten' ? !['w', 'l'].includes(q.type) && !(q.type === 'f' && q.target !== 'papiere') : q.type === 'w')).reverse();
   $app.innerHTML = `<section class="screen"><h1>Meine Geschichte</h1><p class="lead">Ihre Antworten, Ihre Wünsche. Nur auf diesem Gerät.</p>
     <div class="seg"><button data-t="antworten" aria-pressed="${histTab === 'antworten'}">Antworten</button><button data-t="wichtig" aria-pressed="${histTab === 'wichtig'}">Das ist mir wichtig</button></div>
     ${histTab === 'wichtig' ? '<p class="tiny">Eine Gesprächsgrundlage für Familie und Hausarzt. Ausdrücklich keine Verfügung.</p>' : ''}
@@ -375,7 +429,7 @@ routes.geschichte = () => {
   $app.querySelector('#print')?.addEventListener('click', () => printDoc(histTab === 'antworten' ? bookHTML() : cardHTML()));
 };
 const bookHTML = () => `<h1>Meine Geschichte</h1><p class="sub">${esc(S.name)} · erzählt mit Lifely · ${fmt(Date.now())}</p>
-  ${QUESTIONS.filter(q => answered(q.n) && q.type !== 'w').map(q => `<h2>${esc(q.text)}</h2><p>${esc(S.answers[q.n].text).replace(/\n/g, '<br>')}</p>`).join('')}`;
+  ${QUESTIONS.filter(q => answered(q.n) && q.type === 'm').map(q => `<h2>${esc(q.text)}</h2><p>${esc(S.answers[q.n].text).replace(/\n/g, '<br>')}</p>`).join('')}`;
 const cardHTML = () => `<h1>Das ist mir wichtig</h1><p class="sub">${esc(S.name)} · ${fmt(Date.now())} · Gesprächsgrundlage, keine Verfügung</p>
   ${QUESTIONS.filter(q => answered(q.n) && q.type === 'w').map(q => `<h2>${esc(q.text)}</h2><p>${esc(S.answers[q.n].text).replace(/\n/g, '<br>')}</p>`).join('')}`;
 function printDoc(html) { const el = document.getElementById('print'); el.innerHTML = html; window.print(); }
@@ -401,22 +455,20 @@ routes.assistent = () => {
   if (chat.length) $app.querySelector('#chat').lastElementChild.scrollIntoView({ block: 'center' });
 };
 
-/* ---------- Notfall ---------- */
+/* ---------- Notfall: ein einziger Ablauf «Notfallpaket erstellen» ---------- */
 const trusted = () => S.kreis.filter(p => p.trust);
 routes.notfall = () => {
   const old = S.lastExport && S.changed > S.lastExport;
   $app.innerHTML = `<section class="screen"><h1>Im Ernstfall</h1><p class="lead">Damit Ihre Vertrauensperson alles findet.</p>
     <div class="card dark"><div class="spread left">${svg('lock')}<b>Notfallpaket</b></div>
-      <p class="tiny light">Eine verschlüsselte Datei mit Ihrem Wegweiser. Das Passwort steht nur auf dem Notfallblatt.</p>
-      <button class="btn white" data-go="paket">Notfallpaket ${S.lastExport ? 'neu ' : ''}erstellen</button>
-      <p class="tiny light center">${S.lastExport ? `Zuletzt erstellt: ${fmt(S.lastExport)}${old ? ' · seither geändert' : ''}` : 'Noch nicht erstellt'}</p></div>
-    <button class="row" id="sheetBtn"><span class="ico">${svg('file')}</span><span class="m"><b>Notfallblatt drucken</b><small>Fundorte, Kontakte, Hilfsnummern</small></span></button>
+      <p class="tiny light">Eine verschlüsselte Datei mit allem, was Ihre Vertrauensperson im Ernstfall braucht: Wegweiser, Kontakte und Ihre Wünsche.</p>
+      <button class="btn white" data-go="paket/1">Notfallpaket ${S.lastExport ? 'neu ' : ''}erstellen</button>
+      <p class="tiny light center">${S.lastExport ? `Zuletzt erstellt: ${fmt(S.lastExport)}${old ? ' · seither geändert, bitte neu erstellen' : ''}` : 'Noch nicht erstellt'}</p></div>
     <button class="row" data-go="kreis"><span class="ico">${svg('people')}</span><span class="m"><b>Vertrauenspersonen</b><small>${trusted().map(p => esc(p.name)).join(' · ') || 'Noch niemand, in «Mein Kreis» festlegen'}</small></span><span class="chip">${trusted().length}</span></button>
-    <button class="row" data-go="ansicht"><span class="ico coral">${svg('eye')}</span><span class="m"><b>Das sehen Angehörige</b><small>Vorschau der Notfall-Ansicht</small></span></button>
-    <button class="row" data-go="oeffnen"><span class="ico">${svg('folder')}</span><span class="m"><b>Notfallpaket öffnen</b><small>Für Angehörige oder ein neues Gerät</small></span></button>
+    <button class="row" data-go="ansicht"><span class="ico coral">${svg('eye')}</span><span class="m"><b>Das sieht Ihre Vertrauensperson</b><small>Vorschau, nur lesen</small></span></button>
     <p class="note">${svg('shield')}<span>Lifely ist ein Wegweiser. Die Originale und die Rechte bleiben, wo sie sind. Eine Vertrauensperson in Lifely hat keine erbrechtliche Stellung.</span></p>
+    <p class="center"><button class="link" data-go="oeffnen">Sie haben ein Notfallpaket bekommen? Hier öffnen</button></p>
   </section>`;
-  $app.querySelector('#sheetBtn').onclick = () => printDoc(sheetHTML());
 };
 const WORDS = ['Apfel', 'Berg', 'Sonne', 'Fluss', 'Garten', 'Brücke', 'Wolke', 'Linde', 'Kirsche', 'Laterne', 'Rose', 'Schwan', 'Bahnhof', 'Glocke', 'Kastanie', 'Ofen', 'Biene', 'Hafen', 'Meise', 'Tanne', 'Mühle', 'Stern', 'Fenster', 'Insel'];
 const passphrase = () => { const r = crypto.getRandomValues(new Uint32Array(5)); return [0, 1, 2, 3].map(i => WORDS[r[i] % WORDS.length]).join('-') + '-' + (10 + r[4] % 90); };
@@ -426,30 +478,58 @@ async function keyFrom(pw, salt) {
   const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveKey']);
   return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: 250000, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
 }
+function missingList() { // was vor dem Erstellen noch fehlt
+  const m = GUIDE.filter(i => status(i)[0] !== 'ok').map(i => ({ go: 'unterlage/' + i.id, t: i.name, s: status(i)[2] }));
+  if (!trusted().length) m.push({ go: 'kreis', t: 'Vertrauensperson', s: 'Noch niemand in «Mein Kreis» als Vertrauensperson markiert' });
+  return m;
+}
 let lastPw = '';
-routes.paket = () => {
-  lastPw = passphrase();
-  $app.innerHTML = `<section class="screen"><div class="top">${back('notfall', 'Notfall')}</div>
-    <h1>Notfallpaket erstellen</h1><p class="lead">Lifely verschlüsselt Ihren Wegweiser, Ihren Kreis und Ihre Antworten in eine Datei.</p>
-    <ol class="steps"><li>Datei speichern und Ihrer Vertrauensperson geben, z. B. per E-Mail oder USB-Stick.</li><li>Das <b>Notfallblatt drucken</b>. Nur darauf steht das Passwort.</li><li>Blatt an einem sicheren Ort aufbewahren und sagen, wo es liegt.</li></ol>
-    <div class="card sun"><p class="eb">Ihr Passwort</p><p class="pw">${lastPw}</p><p class="tiny">Es wird nirgends in Lifely gespeichert.</p></div>
-    <div class="bottom"><button class="btn primary" id="make">${svg('lock')}Notfallpaket speichern</button><button class="btn ghost" id="sheetBtn">${svg('file')}Notfallblatt mit Passwort drucken</button></div>
-  </section>`;
-  $app.querySelector('#make').onclick = async () => {
+routes.paket = (step = '1') => {
+  const dots = `<div class="dots">${[1, 2, 3].map(i => `<i class="${i <= +step ? 'on' : ''}"></i>`).join('')}</div>`;
+  let body = '';
+  if (step === '1') {
+    const m = missingList();
+    body = `<h1>Ist alles erfasst?</h1>
+      ${m.length ? `<p class="lead">Diese Punkte sind noch offen. Sie können sie jetzt ergänzen oder das Paket trotzdem erstellen und später erneuern.</p>
+        <div class="list">${m.map(x => `<button class="row" data-go="${x.go}"><span class="ico sun">${svg('bell')}</span><span class="m"><b>${esc(x.t)}</b><small>${esc(x.s)}</small></span>${svg('chev', 'chev')}</button>`).join('')}</div>`
+      : `<div class="card mint"><p><b>${svg('check', 'okc')} Alles erfasst.</b></p><p class="tiny">Ihr Wegweiser ist vollständig und Ihre Vertrauensperson ist bestimmt.</p></div>`}
+      <div class="bottom"><button class="btn primary" id="next">${m.length ? 'Trotzdem weiter' : 'Weiter'}</button></div>`;
+  }
+  if (step === '2') {
+    if (!lastPw) lastPw = passphrase();
+    body = `<h1>Ihr Passwort</h1><p class="lead">Die Datei ist verschlossen. Ihre Vertrauensperson braucht dieses Passwort, um sie zu öffnen.</p>
+      <div class="card sun"><p class="pw" id="pw">${lastPw}</p><button class="btn primary" id="copy">${svg('copy')}Passwort kopieren</button></div>
+      <p class="note">${svg('lock')}<span>Geben Sie das Passwort Ihrer Vertrauensperson <b>getrennt von der Datei</b>, zum Beispiel per SMS oder auf einem Zettel. Lifely speichert es nicht.</span></p>
+      <div class="bottom"><button class="btn primary" id="next">Weiter</button></div>`;
+  }
+  if (step === '3') body = `<h1>Notfallpaket speichern</h1><p class="lead">Die Datei wird auf Ihr Gerät geladen. Geben Sie sie danach Ihrer Vertrauensperson, zum Beispiel per E-Mail.</p>
+      <div class="bottom"><button class="btn primary" id="make">${svg('lock')}Notfallpaket speichern</button></div>
+      <div id="done" hidden><div class="card mint"><p><b>${svg('check', 'okc')} Fertig!</b></p><p class="tiny">Datei gespeichert. Ihre Vertrauensperson braucht die Datei und das Passwort.</p></div>
+      <div class="bottom"><button class="btn ghost" data-go="notfall">Zurück zum Notfall-Bereich</button></div></div>`;
+  $app.innerHTML = `<section class="screen"><div class="top">${back(step === '1' ? 'notfall' : 'paket/' + (step - 1), 'Zurück')}<span class="muted">Schritt ${step} von 3</span></div>${dots}${body}</section>`;
+  if (step === '1') lastPw = '';
+  $app.querySelector('#next')?.addEventListener('click', () => go('paket/' + (+step + 1)));
+  $app.querySelector('#copy')?.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(lastPw); toast('Passwort kopiert. Fügen Sie es z. B. in eine SMS ein.'); }
+    catch { const r = document.createRange(); r.selectNodeContents($app.querySelector('#pw')); getSelection().removeAllRanges(); getSelection().addRange(r); toast('Passwort markiert. Jetzt kopieren.'); }
+  });
+  $app.querySelector('#make')?.addEventListener('click', async (e) => {
+    if (!lastPw) return go('paket/2');
+    e.target.disabled = true;
     try {
       const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
       const key = await keyFrom(lastPw, salt);
       const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(JSON.stringify(S)));
       download(new Blob([JSON.stringify({ lifely: 1, created: Date.now(), salt: b64(salt), iv: b64(iv), data: b64(data) })], { type: 'application/json' }), `Lifely-Notfallpaket-${S.name || 'Lifely'}.lifely`);
-      S.lastExport = Date.now(); save(false); toast('Notfallpaket gespeichert. Drucken Sie jetzt das Notfallblatt.');
-    } catch { toast('Das hat nicht geklappt. Bitte nochmals versuchen.'); }
-  };
-  $app.querySelector('#sheetBtn').onclick = () => printDoc(sheetHTML(lastPw));
+      S.lastExport = Date.now(); save(false);
+      e.target.closest('.bottom').hidden = true; $app.querySelector('#done').hidden = false;
+    } catch { e.target.disabled = false; toast('Das hat nicht geklappt. Bitte nochmals versuchen.'); }
+  });
 };
 let opened = null; // entschlüsseltes Paket (nur im Speicher, nur lesend)
 routes.oeffnen = () => {
   $app.innerHTML = `<section class="screen"><div class="top">${back(S.setup ? 'notfall' : 'setup', 'Zurück')}</div>
-    <h1>Notfallpaket öffnen</h1><p class="lead">Wählen Sie die Datei und geben Sie das Passwort vom Notfallblatt ein.</p>
+    <h1>Notfallpaket öffnen</h1><p class="lead">Wählen Sie die Datei und geben Sie das Passwort ein, das Sie bekommen haben.</p>
     <form id="f" class="stack"><label class="field">Datei<input class="in" type="file" id="file" accept=".lifely,application/json"></label>
     <label class="field">Passwort<input class="in" id="pw" autocomplete="off" placeholder="z. B. Apfel-Berg-Sonne-Fluss-42"></label>
     <div class="bottom"><button class="btn primary">${svg('lock')}Öffnen</button></div></form>
@@ -463,21 +543,21 @@ routes.oeffnen = () => {
       const key = await keyFrom(pw, unb64(p.salt));
       const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(p.iv) }, key, unb64(p.data));
       opened = JSON.parse(new TextDecoder().decode(plain)); go('ansicht/paket');
-    } catch { toast('Passwort oder Datei stimmt nicht. Bitte genau so eingeben, wie es auf dem Blatt steht.'); }
+    } catch { toast('Passwort oder Datei stimmt nicht. Bitte genau so eingeben, wie Sie es bekommen haben.'); }
   });
 };
 routes.ansicht = (src) => {
   const D = src === 'paket' && opened ? opened : S;
   const ans = (type) => QUESTIONS.filter(q => q.type === type && D.answers?.[q.n]);
-  const st = (i) => { const keep = S; S = Object.assign(blank(), D); const r = status(i); S = keep; return r; };
   $app.innerHTML = `<section class="screen"><div class="top">${back(src === 'paket' ? (S.setup ? 'notfall' : 'setup') : 'notfall', 'Zurück')}</div>
     <div class="card dark"><p class="eb light">${src === 'paket' ? 'Notfallpaket geöffnet' : 'Vorschau'} · nur lesen</p><h1 class="light">Was ${esc(D.name || 'die Person')} hinterlegt hat</h1></div>
     ${ans('w').length ? `<h2>Das ist mir wichtig</h2>${ans('w').map(q => `<div class="card plain"><p class="qs">${esc(q.text)}</p><p class="ans">${esc(D.answers[q.n].text)}</p></div>`).join('')}` : ''}
     <h2>Wichtige Kontakte</h2><div class="list">${(D.kreis || []).filter(p => p.trust).map(p => `<a class="row" href="tel:${esc(p.phone)}"><span class="ico av">${esc(initial(p.name))}</span><span class="m"><b>${esc(p.name)}</b><small>${esc(p.rel || '')} · ${esc(p.phone || 'keine Nummer')}</small></span></a>`).join('') || '<p class="tiny">Keine Vertrauenspersonen hinterlegt.</p>'}
     ${ans('p').map(q => `<div class="card plain"><p class="qs">${esc(q.text)}</p><p class="ans">${esc(D.answers[q.n].text)}</p></div>`).join('')}</div>
-    <h2>Wegweiser</h2><div class="list">${GUIDE.map(i => { const [c, l, s] = st(i); return `<div class="row"><span class="ico">${svg(i.icon)}</span><span class="m"><b>${i.name}</b><small>${esc(s)}</small></span><span class="chip ${c}">${l}</span></div>`; }).join('')}</div>
+    <h2>Wegweiser</h2><div class="list">${GUIDE.map(i => { const [c, l, s] = status(i, D); const items = i.list ? (D.guide?.[i.id]?.items || []) : [];
+      return `<div class="row top-al"><span class="ico">${svg(i.icon)}</span><span class="m"><b>${i.name}</b><small>${esc(i.list && items.length ? plural(items.length, i.unit) : s)}</small>${items.map(x => `<small class="item">${esc(x.type)}: <b>${esc(x.name)}</b>${x.note ? ' · ' + esc(x.note) : ''}</small>`).join('')}</span><span class="chip ${c}">${l}</span></div>`; }).join('')}</div>
     <h2>Was jetzt zu tun ist</h2><p class="tiny">Orientierung, im Einzelfall zu prüfen.</p>
-    <ol class="steps"><li><b>Im Spital:</b> Patientenverfügung und Vorsorgeauftrag holen (Fundort oben), Hausarzt informieren.</li><li><b>Im Todesfall:</b> Todesbescheinigung durch Arzt oder Ärztin.</li><li>Innert 2 Tagen beim Zivilstandsamt melden (oft übernimmt dies Spital oder Bestatter).</li><li>Bestattungsunternehmen kontaktieren, Wünsche beachten.</li><li>Testament sofort der zuständigen Behörde einreichen.</li><li>Banken, AHV, Pensionskasse und Versicherungen informieren.</li></ol>
+    <ol class="steps"><li><b>Im Spital:</b> Patientenverfügung und Vorsorgeauftrag holen (Fundort oben), Hausarzt informieren.</li><li><b>Im Todesfall:</b> Todesbescheinigung durch Arzt oder Ärztin.</li><li>Innert 2 Tagen beim Zivilstandsamt melden (oft übernimmt dies Spital oder Bestatter).</li><li>Bestattungsunternehmen kontaktieren, Wünsche beachten.</li><li>Testament sofort der zuständigen Behörde einreichen.</li><li>Banken, AHV, Pensionskasse und Versicherungen informieren, Verträge und Abos kündigen (Liste oben).</li></ol>
     <h2>Beratung und Hilfe</h2><div class="list">${HELP.map(h => `<a class="row" href="tel:${h.tel}"><span class="ico ${h.urgent ? 'coral' : ''}">${svg('phone')}</span><span class="m"><b>${h.n} · ${h.name}</b><small>${h.sub}</small></span></a>`).join('')}</div>
     ${src === 'paket' && opened ? '<div class="bottom"><button class="btn ghost" id="restore">Auf diesem Gerät übernehmen</button></div>' : ''}
   </section>`;
@@ -485,15 +565,6 @@ routes.ansicht = (src) => {
     if (await confirmSheet('Daten übernehmen?', 'Die Daten aus dem Notfallpaket ersetzen alles, was auf diesem Gerät in Lifely gespeichert ist.', 'Ja, übernehmen')) { S = Object.assign(blank(), opened); save(false); applySize(); toast('Übernommen.'); go('heute'); }
   });
 };
-function sheetHTML(pw) {
-  const tr = trusted();
-  return `<h1>Notfallblatt</h1><p class="sub">${esc(S.name)} · Stand ${fmt(Date.now())} · Lifely</p>
-  ${pw ? `<div class="box"><b>Passwort für das Notfallpaket:</b><br><span class="pwp">${pw}</span><br><small>Die Datei «Lifely-Notfallpaket» öffnen Sie unter lifely → Notfall → «Notfallpaket öffnen».</small></div>` : ''}
-  <h2>Wo liegt was?</h2><table>${GUIDE.map(i => { const d = S.guide[i.id] || {}; return `<tr><td><b>${i.name}</b></td><td>${i.person ? esc(d.person || '–') : d.has === 'ja' ? esc(d.where || S.papiere || 'Fundort fehlt') + (d.copy ? ' · Kopie: ' + esc(d.copy) : '') : d.has === 'nein' ? 'nicht vorhanden' : '–'}</td></tr>`; }).join('')}</table>
-  <h2>Vertrauenspersonen</h2><table>${tr.map(p => `<tr><td><b>${esc(p.name)}</b> (${esc(p.rel || '')})</td><td>${esc(p.phone || '')}</td></tr>`).join('') || '<tr><td>–</td></tr>'}</table>
-  <h2>Hilfe</h2><table>${HELP.map(h => `<tr><td><b>${h.n}</b></td><td>${h.name}</td></tr>`).join('')}</table>
-  <p class="sub">Lifely ist ein Wegweiser und kein Rechtsdokument. Originale bleiben am genannten Ort.</p>`;
-}
 
 /* ---------- Profil und Sicherheit ---------- */
 routes.profil = () => {
@@ -517,7 +588,7 @@ routes.sicherheit = () => {
     <ul class="checks"><li>${svg('phoneDev')}<span><b>Wo liegen die Daten?</b> Nur in diesem Browser auf diesem Gerät. Kein Konto, keine Cloud, kein Server.</span></li>
     <li>${svg('spark')}<span><b>Was geht an eine KI?</b> Nichts. Der Assistent antwortet aus einer Wissensbasis auf dem Gerät.</span></li>
     <li>${svg('lock')}<span><b>Was wird nie gespeichert?</b> Passwörter, PINs, Kontonummern. Lifely fragt nur, <i>wo</i> etwas ist.</span></li>
-    <li>${svg('shield')}<span><b>Notfallpaket:</b> verschlüsselt (AES-256). Ohne das Passwort vom Notfallblatt kann niemand die Datei lesen.</span></li>
+    <li>${svg('shield')}<span><b>Notfallpaket:</b> verschlüsselt (AES-256). Ohne das Passwort kann niemand die Datei lesen.</span></li>
     <li>${svg('bell')}<span><b>Wichtig:</b> Wenn Sie die Browserdaten löschen, sind die Daten weg. Erstellen Sie darum regelmässig ein Notfallpaket.</span></li></ul></section>`;
 };
 
@@ -536,8 +607,9 @@ function loadDemo() {
       vorsorgeauftrag: { has: 'nein' },
       testament: { has: 'ja', where: 'Notariat Bern', checked: now - 6 * 365 * DAY },
       vertretung: { person: 'Anna Muster', informed: true },
-      versicherungen: { has: 'ja', where: 'Schrank links, grüner Ordner', checked: now - 200 * DAY },
-      konten: {},
+      versicherungen: { items: [{ type: 'Krankenkasse', name: 'CSS', note: 'grüner Ordner' }, { type: 'Haftpflicht & Hausrat', name: 'Mobiliar', note: 'grüner Ordner' }] },
+      konten: { items: [{ type: 'Privatkonto', name: 'Berner Kantonalbank', note: 'Filiale Bümpliz' }, { type: 'Säule 3a', name: 'PostFinance', note: '' }] },
+      vertraege: {},
     },
     coach: [true, true],
     kreis: [
