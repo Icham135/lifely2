@@ -1,0 +1,38 @@
+/* Lifely 2.0 – Ergänzungen zur Landingpage (Sonne für die Wochenfrage, Mein Kreis, Kontaktformular). */
+.grad { background: linear-gradient(100deg, var(--brand) 10%, var(--brand-2) 55%, #d9962a); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; }
+.hero h1 { font-size: clamp(42px, 6vw, 76px); }
+.chip-ic.sunic, .tag-ic.sunic { background: var(--sun1); color: #6b5210; }
+.track.q span { font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif; font-weight: 600; color: var(--ink); }
+.track.q span::before { background: var(--sun1) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b5210' stroke-width='2.5' stroke-linecap='round'%3E%3Crect x='9' y='3' width='6' height='11' rx='3'/%3E%3Cpath d='M5 11a7 7 0 0 0 14 0M12 18v3'/%3E%3C/svg%3E") center/12px no-repeat; }
+.steps.four { grid-template-columns: repeat(4, 1fr); }
+.steps.four .step h3 { font-size: 20px; }
+.section.kreis { background: linear-gradient(180deg, var(--bg), var(--sun1) 30%, var(--sun1) 70%, var(--bg)); }
+.split-text h3.big { font-size: clamp(32px, 4vw, 48px); margin-top: 12px; }
+.helpline { margin-top: 24px; background: var(--surface); border-radius: 20px; padding: 16px 18px; box-shadow: var(--shadow); display: grid; gap: 6px; font-size: 15px; color: var(--ink-2); }
+.helpline b { color: var(--ink); font-size: 16px; }
+.helpline a { color: var(--brand); font-weight: 800; text-decoration: none; margin-right: 6px; font-variant-numeric: tabular-nums; }
+.micbox { width: 64px; height: 64px; border-radius: 50%; background: var(--brand); color: #fff; display: grid; place-items: center; box-shadow: 0 0 0 10px var(--tint); animation: breathe 3s ease-in-out infinite; }
+.micbox svg { width: 30px; height: 30px; }
+@keyframes breathe { 50% { box-shadow: 0 0 0 18px var(--tint); } }
+.t-lang .aa { color: var(--brand); }
+
+/* Kontaktformular (nicht verbunden) */
+.contact { background: #fff; border-radius: 26px; padding: 22px; color: var(--ink); box-shadow: 0 24px 50px rgba(0,0,0,.2); }
+.contact form { display: grid; gap: 12px; }
+.contact label { display: grid; gap: 6px; font-weight: 800; font-size: 15px; }
+.contact input, .contact textarea { font: inherit; font-weight: 400; width: 100%; min-height: 52px; padding: 12px 14px; border-radius: 14px; border: 2px solid var(--line); background: var(--bg); color: var(--ink); }
+.contact textarea { resize: vertical; }
+.contact input:focus, .contact textarea:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 4px var(--tint); }
+.contact .store.light { background: var(--brand); color: #fff; width: 100%; justify-content: center; border: 0; cursor: pointer; font-family: inherit; }
+.form-note { font-size: 12.5px; color: var(--ink-3); text-align: center; }
+.contact-ok { text-align: center; padding: 30px 10px; display: grid; gap: 8px; justify-items: center; }
+.contact-ok svg { width: 56px; height: 56px; color: #fff; background: var(--brand); border-radius: 50%; padding: 12px; stroke-width: 3; }
+.contact-ok b { font-size: 22px; }
+.contact-ok p { color: var(--ink-2); }
+
+@media (max-width: 960px) { .steps.four { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 620px) {
+  .steps.four { grid-template-columns: 1fr; }
+  .hero h1 { font-size: 40px; }
+  .contact { padding: 18px; }
+}
